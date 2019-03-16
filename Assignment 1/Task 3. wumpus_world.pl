@@ -28,7 +28,7 @@ initialize(World, [Stench,Breeze,Glitter,no,no]) :-
   breeze(1, 1, Breeze),
   glitter(1, 1, Glitter),
   assert(wumpus_world_size(5)),
-  assert(maximal_depth(15)),
+  assert(maximal_depth(16)),
   writeln("initialization done").
 
 
@@ -57,12 +57,19 @@ initialize_world(World) :-
 
 initialize_world(World) :-
   World = impossible,
-  assert(wumpus_location(1,3)),
+  assert(wumpus_location(3,2)),
   assert(wumpus_health(alive)),
   assert(gold(2,3)),
   assert(pit(3,1)),
-  assert(pit(4,4)),
-  assert(pit(2,2)).
+  assert(pit(2,2)),
+  assert(pit(1,3)),
+  assert(pit(5,5)).
+
+initialize_world(World) :-
+  World = without_pits,
+  assert(wumpus_location(3,2)),
+  assert(wumpus_health(alive)),
+  assert(gold(2,3)).
 
 
 /* initialize_agent: agent is initially alive, destitute (except for one
@@ -147,15 +154,6 @@ kill_wumpus :-
 
 /* Utility predicates for algorithm part */
 
-/*neighbots(X, Y, Xnew, Ynew) :-
-  (
-    Xnew is X, Ynew is Y + 1; % up
-    Xnew is X + 1, Ynew is Y; % right
-    Xnew is X, Ynew is Y - 1; % down
-    Xnew is X - 1, Ynew is Y  % left
-  ),
-  is_in_cave()*/
-
 neighbor(up, X, Y, Xnew, Ynew) :-
   Xnew is X, Ynew is Y + 1. % up
 
@@ -191,15 +189,18 @@ start(World) :-
 
 /* Algorithm predicates */
 
+walk(X, Y, _, _) :-
+  not(is_in_cave(X, Y)).
+
 walk(_, _, Depth, _) :-
   maximal_depth(Max_depth),
   Depth = Max_depth.
   %writeln("max depth walk").
 
-  walk(X, Y, _, Visited) :-
-    glitter(X, Y, yes),
-    append(Visited, [[X, Y]], VisitedNew),
-    writeln("We reached the goal " + VisitedNew).
+walk(X, Y, _, Visited) :-
+  glitter(X, Y, yes),
+  append(Visited, [[X, Y]], VisitedNew),
+  writeln("We reached the goal " + VisitedNew).
 
 walk(X, Y, _, _) :-
   wumpus(X, Y, yes).
@@ -223,11 +224,10 @@ walk(X, Y, Depth, Visited) :-
   neighbor(left, X, Y, X4, Y4),
   Neighbors = [[X1,Y1], [X2,Y2], [X3,Y3], [X4,Y4]],
 
-  writeln([X,Y]+Depth+VisitedNew),
+  %writeln([X,Y]+Depth+VisitedNew), %used for debugging
 
   forall(member(Z, Neighbors), ( 
         coordinates(Z, Xnew, Ynew),
-        is_in_cave(Xnew, Ynew) -> false ;
         (
           member(Z, VisitedNew); % already visited
           walk(Xnew, Ynew, DepthNew, VisitedNew) % or visit now
