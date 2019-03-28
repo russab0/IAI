@@ -9,34 +9,80 @@ the error"""
 from random import randint
 
 INF = 10**9
-w1, w2 = 2, 3
-y = 12
+POPULATION_SIZE = 10
+EVOLUTION_CYCLE = 10
+BEST_PARENTS_COUNT = 3
 
-def fitness(X):
-    x1, x2 = X
-    a, b = x1 * w1 + x2 * w2, y
-    a, b = min(a, b), max(a, b)
-    return a / b * 100
 
-population = list()
-for i in range(3):
-    population.append((randint(-y, y+1), randint(-y, y+1)))
-    
-print(population)
-print(fitness((4, 2)))
+def fitness(individual):
+    assert is_individual(individual)
+    x1, x2 = individual
+    return - abs(w1 * x1 + w2 * x2 - y)
 
-def find_2_maxes(arr):
-    q = sorted(arr, key = lambda x: fitness(x))
-    return (q[-2], q[-1])
 
-# Crossover:
-for i in range(100):
-    p1, p2 = find_2_maxes(population)
+def sort_by_fitness(arr):
+    arr.sort(key = lambda x: fitness(x))
+    return arr
+
+
+def find_maxes(arr, cnt = 1):
+    q = sort_by_fitness(arr)
+    return q[-cnt:]
+
+
+def generate_individual():
+    return (randint(-y, y+1), randint(-y, y+1))
+
+
+def is_individual(p):
+    return isinstance(p, tuple) and isinstance(p[0], int) and isinstance(p[1], int)
+
+
+def crossover(p1, p2):
+    assert is_individual(p1), is_individual(p2)
     child1 = (p1[0], p2[1])
     child2 = (p2[0], p1[1])
-    population.append(child1)
-    population.append(child2)
-    print(fitness(child1), fitness(child2))
+    return [child1, child2]
 
-superhero = find_2_maxes(population)[-1]
-print(superhero, fitness(superhero))
+
+def mutation(p):
+    assert is_individual(p)
+    child = (p[1], p[0])
+    return child
+
+
+w1, w2 = -2, 1
+y = 120
+
+population = list()
+for i in range(POPULATION_SIZE):
+    population.append(generate_individual())
+
+for i in range(EVOLUTION_CYCLE):
+    prev_sum_of_fitnesses = sum([fitness(x) for x in population])
+    parents = find_maxes(population, cnt = BEST_PARENTS_COUNT)
+    children = [mutation(p) for p in parents]
+    
+    for p1 in parents:
+        for p2 in parents:
+            if p1 != p2:
+                cross = crossover(p1, p2)
+                for ch in cross:
+                    if ch not in children:
+                        children.append(ch)
+    
+    for child in children:    
+        if child not in population:
+            assert is_individual(child)
+            population.append(child)
+
+    population = find_maxes(population, POPULATION_SIZE)
+
+    sum_of_fitnesses = sum([fitness(x) for x in population])
+
+    if prev_sum_of_fitnesses == sum_of_fitnesses:
+        population.append(generate_individual())
+        population = find_maxes(population, POPULATION_SIZE)
+
+superhero = find_maxes(population)[0]
+print("superhero", superhero, fitness(superhero))
