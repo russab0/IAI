@@ -5,17 +5,21 @@ from os import mkdir
 from datetime import datetime
 
 
-INF = 10**9
+INF = 10**18
+IMAGE_SIZE = 512
 POPULATION_SIZE = 10
 EVOLUTION_CYCLE = 100
-BEST_PARENTS_COUNT = 3
+BEST_PARENTS_COUNT = 4
+SWAP_BLOCK_SIZE = 32
 FITNESS_BLOCK_SIZE = 8
-SWAP_BLOCK_SIZE = 8
-IMAGE_SIZE = 512
-COPY_BLOCK_SIZE = 16
+MUTATION_BLOCK_SIZE = 8
 
-perferct_image = None
+
 input_image = None
+base_image = None
+population = list()
+
+
 
 class Picture():
     image = None
@@ -28,7 +32,7 @@ class Picture():
         if self.__fitness__ is not None:
             return self.__fitness__
         
-        perfect = perfect_image
+        perfect = input_image
         first = self.image.load()
         second = perfect.image.load()
         result = 0
@@ -46,41 +50,8 @@ class Picture():
 def find_bests(arr, cnt = 1):
     return arr[:cnt]
 
-
-def get_child(first, second):
-    first = first.image
-    second = second.image
-
-    
-    first_draw = ImageDraw.Draw(first) #Создаем инструмент для рисования. 
-    first_pix = first.load() #Выгружаем значения пикселей.
-
-    second_draw = ImageDraw.Draw(second) #Создаем инструмент для рисования. 
-    second_pix = second.load()     #Выгружаем значения пикселей.
-    
-    #make 100 random permutations
-    for t in range(100):
-        
-        #choose block 8x8 from 512x512 matrix
-        x1 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        y1 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        
-        #choose another block 8x8 from 512x512 matrix
-        x2 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        y2 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE   
-        
-        for i in range(SWAP_BLOCK_SIZE):
-            for j in range(SWAP_BLOCK_SIZE):
-                #print(i, x1, j, y1)
-                temp = first_pix[i + x1, j + y1]
-                first_draw.point((i + x1, j + y1), second_pix[i + x2, j + y2])
-                second_draw.point((i + x2, j + y2), temp)
-                
-    return Picture(first) # or first and second
-
-
 def crossover(p1, p2):
-    perfect = perfect_image.image
+    perfect = input_image.image
     first = p1.image
     second = p2.image
 
@@ -110,80 +81,89 @@ def crossover(p1, p2):
     return Picture(child)
 
 
-def mutation(p):
-    perfect = perfect_image.image
-    p = p.image
-    
-    perfect_pix = perfect.load() 
-    
-    p_draw = ImageDraw.Draw(p)
-    
-    for t in range(10):
-        x = randint(0, 512/COPY_BLOCK_SIZE - 1) * COPY_BLOCK_SIZE
-        y = randint(0, 512/COPY_BLOCK_SIZE - 1) * COPY_BLOCK_SIZE
+def mutation(ind):
+    ind = ind.image.copy()
+    ind_draw = ImageDraw.Draw(ind)
+
+    perfect = input_image.image
+    perfect_pix = perfect.load()
+
+    for t in range(100):
+        x = randint(0, IMAGE_SIZE - 1 - MUTATION_BLOCK_SIZE)
+        y = randint(0, IMAGE_SIZE - 1 - MUTATION_BLOCK_SIZE)
         
-        for i in range(COPY_BLOCK_SIZE):
-            for j in range(COPY_BLOCK_SIZE):        
-                p_draw.point((i + x, j + y), perfect_pix[i + x, j + y])
+        ind_pix = ind.load()
+
+        best_score = INF
+        best_rgb = ind_pix[x, y]
+
+        for q in range(100):
+            r, g, b = [randint(0, 10) * 25 for _ in range(3)]
+            
+            score = 0
+            for i in range(MUTATION_BLOCK_SIZE):
+                for j in range(MUTATION_BLOCK_SIZE):
+                    score += sum([abs(perfect_pix[x+i, y+j][color] - [r, g, b][color]) for color in range(3)])
+            if score < best_score:
+                best_score = score
+                best_rgb = (r, g, b)
+
+        for i in range(MUTATION_BLOCK_SIZE):
+            for j in range(MUTATION_BLOCK_SIZE):
+                ind_draw.point((x+i, y+j), best_rgb)
     
-    return Picture(p)
+    return Picture(ind)
 
 
 def generate_individual(p):
     first = p.image.copy()
-    second = p.image.copy()
     
-    first_draw = ImageDraw.Draw(first) #Создаем инструмент для рисования. 
-    first_pix = first.load() #Выгружаем значения пикселей.
-
-    second_draw = ImageDraw.Draw(second) #Создаем инструмент для рисования. 
-    second_pix = second.load()     #Выгружаем значения пикселей.
+    first_draw = ImageDraw.Draw(first)
+    first_pix = first.load() 
     
     #make 100 random permutations
-    for t in range(1000):
-        
+    for t in range(100):    
         #choose block 8x8 from 512x512 matrix
-        x1 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        y1 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        
+        x1 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
+        y1 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
         #choose another block 8x8 from 512x512 matrix
-        x2 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE
-        y2 = randint(0, 512/SWAP_BLOCK_SIZE - 1) * SWAP_BLOCK_SIZE   
+        x2 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
+        y2 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
         
         for i in range(SWAP_BLOCK_SIZE):
             for j in range(SWAP_BLOCK_SIZE):
                 #print(i, x1, j, y1)
                 temp = first_pix[i + x1, j + y1]
-                first_draw.point((i + x1, j + y1), second_pix[i + x2, j + y2])
-                second_draw.point((i + x2, j + y2), temp)
+                first_draw.point((i + x1, j + y1), first_pix[i + x2, j + y2])
+                first_draw.point((i + x2, j + y2), temp)
                 
     return Picture(first) # or first and second
 
-perfect_image = Picture(Image.open("perfect\\cat.jpg")) #Открываем изображение
-input_image = Picture(Image.open("input\\smeshariki.jpg")) #Открываем изображение
-
-
-population = [input_image]
-for i in range(POPULATION_SIZE - 1):
-    population.append(generate_individual(input_image))
 
 def append_individual(ind):
     global population
     population.append(ind)
     population.sort(key = lambda x : x.get_fitness())
     population = find_bests(population, POPULATION_SIZE)
-    
+
+
+input_image = Picture(Image.open("images\\harold.jpg")) #Открываем изображение
+base_image = Picture(Image.open("images\\vangogh.jpg")) #Открываем изображение
 folder = str(datetime.now().strftime('day %d %H.%M'))
 mkdir(folder)
+
+
+population = [base_image]
+for i in range(POPULATION_SIZE - 1):
+    population.append(generate_individual(base_image))
+
 for i in range(len(population)):
     population[i].image.save(folder + "\\init_pop" + str(i) + ".jpg", "JPEG")
-print([x.get_fitness() for x in population])
 population.sort(key = lambda x: x.get_fitness())
 
 for i in range(EVOLUTION_CYCLE):
     print("iter", i)
-    #prev_sum_of_fitnesses = sum([fitness(x, perfect_image) for x in population])
-    #assert len()
+    #prev_sum_of_fitnesses = sum([fitness(x, input_image) for x in population])
     parents = find_bests(population, cnt = BEST_PARENTS_COUNT)
     children = [mutation(p) for p in parents]
     
@@ -192,27 +172,16 @@ for i in range(EVOLUTION_CYCLE):
             if p1 != p2:
                 children += [crossover(p1, p2)]
 
-    print("childs", [id(x) for x in children])
     for child in children:    
         if child not in population:
             append_individual(child)
 
     population = find_bests(population, POPULATION_SIZE)
 
-    """sum_of_fitnesses = sum([fitness(x) for x in population])
-    if prev_sum_of_fitnesses == sum_of_fitnesses:
-        population.append(generate_individual())
-        population = find_maxes(population, POPULATION_SIZE)"""
-
+    #sum_of_fitnesses = sum([fitness(x) for x in population])
+    #if prev_sum_of_fitnesses == sum_of_fitnesses:
+    #    population.append(generate_individual())
+    #    population = find_maxes(population, POPULATION_SIZE)
 
     superhero = population[0]
-    print("superhero", superhero.get_fitness())
-    #print("total fitness", sum([x.get_fitness() for x in population]))
-    #print("fitness population", population)
-    #print("id of population", [id(x) for x in population])
-    print()
     superhero.image.save(folder + "\\iter" + str(i) + ".jpg", "JPEG")
-
-
-superhero = population[0]
-superhero.image.save(folder + "superhero.jpg", "JPEG")
