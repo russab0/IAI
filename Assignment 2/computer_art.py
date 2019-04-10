@@ -3,143 +3,189 @@ from PIL.PngImagePlugin import PngImageFile
 from random import randint
 from os import mkdir
 from datetime import datetime
-
+from gc import collect
 
 INF = 10**18
 IMAGE_SIZE = 512
-POPULATION_SIZE = 10
-EVOLUTION_CYCLE = 100
+POPULATION_SIZE = 15
+EVOLUTION_CYCLE = 255
 BEST_PARENTS_COUNT = 4
-SWAP_BLOCK_SIZE = 32
-FITNESS_BLOCK_SIZE = 8
-MUTATION_BLOCK_SIZE = 8
+MUTATION_BLOCK_SIZE = 8      ;  MUTATION_CYCLE = 100
+CROSSOVER_BLOCK_SIZE = 16    ;  CROSSOVER_CYCLE = 100
+GENERATION_BLOCK_SIZE = 128  ;  GENERATION_CYCLE = 10
+
+CONSTS = {'INF': INF, 
+    'IMAGE_SIZE': IMAGE_SIZE, 
+    'POPULATION_SIZE': POPULATION_SIZE, 
+    'EVOLUTION_CYCLE': EVOLUTION_CYCLE, 
+    'BEST_PARENTS_COUNT': BEST_PARENTS_COUNT,
+    'MUTATION_BLOCK_SIZE': MUTATION_BLOCK_SIZE, 
+    'CROSSOVER_BLOCK_SIZE': CROSSOVER_BLOCK_SIZE, 
+    'GENERATION_BLOCK_SIZE': GENERATION_BLOCK_SIZE,
+    'MUTATION_CYCLE': MUTATION_CYCLE, 
+    'CROSSOVER_CYCLE': CROSSOVER_CYCLE, 
+    'GENERATION_CYCLE': GENERATION_CYCLE}
+    
+assert MUTATION_BLOCK_SIZE <= IMAGE_SIZE
+assert CROSSOVER_BLOCK_SIZE <= IMAGE_SIZE
+assert GENERATION_BLOCK_SIZE <= IMAGE_SIZE
+assert BEST_PARENTS_COUNT <= POPULATION_SIZE
 
 
-input_image = None
+perfect_image = None
 base_image = None
 population = list()
 
 
-
+# Class for storing an image and its fitness function value
 class Picture():
-    image = None
+    __image__ = None
     __fitness__ = None
 
-    def __init__(self, image):
-        self.image = image
+    # Initializes Picture by given ImageFile
+    def __init__(self, image, fitness = None):
+        self.__image__ = image
+        self.__fitness__ = fitness
 
+    # Returns pixels of the Picture
+    def load(self):
+        return self.__image__.load()
+
+    # Returns drawable object based on the image
+    def draw(self): 
+        return ImageDraw.Draw(self.__image__)
+
+    # Copies current Picture and returns it
+    def copy(self):
+        return Picture(self.__image__.copy(), None)
+
+    # Saves the picture by given directory and extension
+    def save(self, directory, ext):
+        return self.__image__.save(directory, ext)
+
+    # Returns fitness function of the Picture
     def get_fitness(self):
-        if self.__fitness__ is not None:
+        if self.__fitness__ is not None: # If it is already calculated
             return self.__fitness__
         
-        perfect = input_image
-        first = self.image.load()
-        second = perfect.image.load()
-        result = 0
+        ind_pix = self.load()
+        perf_pix = perfect_image.load()
+        fit = 0
         
+        # For all pixels and for all 3 color-parameters in RGB-model
+        # sums absolute difference between the picture and perfect picture
         for i in range(0, IMAGE_SIZE):
             for j in range(0, IMAGE_SIZE):
-                
-                for t in range(3):
-                    result += abs(first[i, j][t] - second[i, j][t])
+                #print(ind_pix[i,j])
+                #print(perf_pix[i,j])
+                fit += sum([abs(ind_pix[i,j][t] - perf_pix[i,j][t]) 
+                                for t in range(3)])
 
-        self.__fitness__ = result
-        return result
-
-
-def find_bests(arr, cnt = 1):
-    return arr[:cnt]
-
-def crossover(p1, p2):
-    perfect = input_image.image
-    first = p1.image
-    second = p2.image
-
-    first_pix = first.load()
-    second_pix = second.load()   
-    perfect_pix = perfect.load()
-    
-    child = first.copy()
-    child_draw = ImageDraw.Draw(child)
-    
-    for i in range(0, IMAGE_SIZE):
-        for j in range(0, IMAGE_SIZE):
-            
-            rgb = [0, 0, 0]
-            
-            for t in range(3):
-                a = abs(perfect_pix[i, j][t] - first_pix[i, j][t])
-                b = abs(perfect_pix[i, j][t] - second_pix[i, j][t])
-                
-                if a < b:
-                    rgb[t] = first_pix[i, j][t]
-                else:
-                    rgb[t] = second_pix[i, j][t]
-                    
-            child_draw.point((i, j), (rgb[0], rgb[1], rgb[2]))
-
-    return Picture(child)
+        self.__fitness__ = fit
+        return fit
 
 
+# Changes some genes in the individual and returns new child
 def mutation(ind):
-    ind = ind.image.copy()
-    ind_draw = ImageDraw.Draw(ind)
+    ind = ind.copy()
+    ind_draw = ind.draw()
+    perf_pix = perfect_image.load()
 
-    perfect = input_image.image
-    perfect_pix = perfect.load()
-
-    for t in range(100):
-        x = randint(0, IMAGE_SIZE - 1 - MUTATION_BLOCK_SIZE)
-        y = randint(0, IMAGE_SIZE - 1 - MUTATION_BLOCK_SIZE)
-        
+    for _ in range(MUTATION_CYCLE):
+        # Selecting random coordinates as a left-top pixel of the block
+        x = randint(0, IMAGE_SIZE - MUTATION_BLOCK_SIZE - 1)
+        y = randint(0, IMAGE_SIZE - MUTATION_BLOCK_SIZE - 1)
         ind_pix = ind.load()
 
+        # Calculating the best rgb for the block
         best_score = INF
-        best_rgb = ind_pix[x, y]
-
+        best_rgb = tuple(ind_pix[x, y])
         for q in range(100):
-            r, g, b = [randint(0, 10) * 25 for _ in range(3)]
-            
+            # Generating random rgb tuple
+            rgb = tuple([randint(0, 10) * 25 for _ in range(3)])
             score = 0
-            for i in range(MUTATION_BLOCK_SIZE):
-                for j in range(MUTATION_BLOCK_SIZE):
-                    score += sum([abs(perfect_pix[x+i, y+j][color] - [r, g, b][color]) for color in range(3)])
+            for i in range(x, x + MUTATION_BLOCK_SIZE):
+                for j in range(y, y + MUTATION_BLOCK_SIZE):
+                    score += sum([
+                        abs(perf_pix[i,j][color] - rgb[color]) 
+                        for color in range(3)])
             if score < best_score:
                 best_score = score
-                best_rgb = (r, g, b)
+                best_rgb = rgb
 
-        for i in range(MUTATION_BLOCK_SIZE):
-            for j in range(MUTATION_BLOCK_SIZE):
-                ind_draw.point((x+i, y+j), best_rgb)
+        # Drawing the best generated rgb color on the block
+        for i in range(x, x + MUTATION_BLOCK_SIZE):
+            for j in range(y, y + MUTATION_BLOCK_SIZE):
+                ind_draw.point((i, j), best_rgb)
     
-    return Picture(ind)
+    return ind
 
 
-def generate_individual(p):
-    first = p.image.copy()
+# Gets two parents as arguments and returns child 
+# which has the best genes of both parents
+def crossover(first, second):
+    first_pix = first.load()
+    second_pix = second.load()   
+    perfect_pix = perfect_image.load()
     
-    first_draw = ImageDraw.Draw(first)
-    first_pix = first.load() 
+    child = first.copy()
+    child_draw = child.draw() 
+     
+    for _ in range(CROSSOVER_CYCLE):
+        # Selecting random coordinates as a left-top pixel of the block
+        x = randint(0, IMAGE_SIZE - CROSSOVER_BLOCK_SIZE - 1)
+        y = randint(0, IMAGE_SIZE - CROSSOVER_BLOCK_SIZE - 1)
+        for i in range(x, x + CROSSOVER_BLOCK_SIZE):
+            for j in range(y, y + CROSSOVER_BLOCK_SIZE):
+                # Selecting the best rgb from parents
+                rgb = [0] * 3
+                for t in range(3):
+                    # Calculating absolute distances from parents to perfect image
+                    a = abs(perfect_pix[i, j][t] - first_pix[i, j][t])
+                    b = abs(perfect_pix[i, j][t] - second_pix[i, j][t])
+                    if a < b:
+                        rgb[t] = first_pix[i, j][t]
+                    else:
+                        rgb[t] = second_pix[i, j][t]
+                # Drawing the best rgb
+                child_draw.point((i, j), tuple(rgb))
+
+    return child
+
+
+# Returns cnt number of best individuals from population
+def find_bests(population, cnt = 1):
+    return population[:cnt]
+
+
+# Generates individual based on base picture
+def generate_individual(base):
+    ind = base.copy()
+    ind_draw = ind.draw()
+    ind_pix = ind.load() 
     
-    #make 100 random permutations
-    for t in range(100):    
-        #choose block 8x8 from 512x512 matrix
-        x1 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
-        y1 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
-        #choose another block 8x8 from 512x512 matrix
-        x2 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
-        y2 = randint(0, IMAGE_SIZE - 1 - SWAP_BLOCK_SIZE)
+    for _ in range(GENERATION_CYCLE):    
+        # Selecting coordinates for the first block
+        x1 = randint(0, IMAGE_SIZE - 1 - GENERATION_BLOCK_SIZE)
+        y1 = randint(0, IMAGE_SIZE - 1 - GENERATION_BLOCK_SIZE)
+        # Selecting coordinates for the second block
+        x2 = randint(0, IMAGE_SIZE - 1 - GENERATION_BLOCK_SIZE)
+        y2 = randint(0, IMAGE_SIZE - 1 - GENERATION_BLOCK_SIZE)
         
-        for i in range(SWAP_BLOCK_SIZE):
-            for j in range(SWAP_BLOCK_SIZE):
-                #print(i, x1, j, y1)
-                temp = first_pix[i + x1, j + y1]
-                first_draw.point((i + x1, j + y1), first_pix[i + x2, j + y2])
-                first_draw.point((i + x2, j + y2), temp)
+        for i in range(GENERATION_BLOCK_SIZE):
+            for j in range(GENERATION_BLOCK_SIZE):
+                # Swapping pixels of first and second block
+                first_coord = (x1 + i, y1 + j)
+                second_coord = (x2 + i, y2 + j)
+                temp = ind_pix[first_coord]
+                ind_draw.point(first_coord, ind_pix[second_coord])
+                ind_draw.point(second_coord, temp)
                 
-    return Picture(first) # or first and second
+    return ind
 
 
+# Appends given individual to population 
+# and kills most weak members of population
 def append_individual(ind):
     global population
     population.append(ind)
@@ -147,41 +193,81 @@ def append_individual(ind):
     population = find_bests(population, POPULATION_SIZE)
 
 
-input_image = Picture(Image.open("images\\harold.jpg")) #Открываем изображение
-base_image = Picture(Image.open("images\\vangogh.jpg")) #Открываем изображение
-folder = str(datetime.now().strftime('day %d %H.%M'))
-mkdir(folder)
+def main(base, perfeсе):
+    global base_image, perfect_image, population
 
+    # Opening images
+    base_image = Picture(Image.open("images\\" + base + ".jpg"))
+    perfect_image = Picture(Image.open("images\\" + perfect + ".jpg"))
+    folder = str(datetime.now().strftime('day %d %H.%M.%S'))
+    mkdir(folder)
 
-population = [base_image]
-for i in range(POPULATION_SIZE - 1):
-    population.append(generate_individual(base_image))
+    # Writing used constants to the info-file
+    const_file = open(folder + "\\info.txt", "w")
+    for name, value in CONSTS.items():
+        print(name, value, file=const_file)
+    const_file.close()
 
-for i in range(len(population)):
-    population[i].image.save(folder + "\\init_pop" + str(i) + ".jpg", "JPEG")
-population.sort(key = lambda x: x.get_fitness())
-
-for i in range(EVOLUTION_CYCLE):
-    print("iter", i)
-    #prev_sum_of_fitnesses = sum([fitness(x, input_image) for x in population])
-    parents = find_bests(population, cnt = BEST_PARENTS_COUNT)
-    children = [mutation(p) for p in parents]
+    # Creating initial population
+    population = [base_image]
+    for i in range(POPULATION_SIZE - 1):
+        population.append(generate_individual(base_image))
+        population[i].save(folder + "\\init_pop" + str(i) + ".jpg", "JPEG")
+    population.sort(key=lambda x: x.get_fitness())
     
-    for p1 in parents:
-        for p2 in parents:
-            if p1 != p2:
-                children += [crossover(p1, p2)]
+    # 0-th iteration's superhero is strongers individual from initial population
+    population[0].save(folder + "\\iter 0.jpg", "JPEG")
+    fit_file = open(folder + "\\fitness.txt", "w")
+    print(population[0].get_fitness(), file=fit_file)
 
-    for child in children:    
-        if child not in population:
-            append_individual(child)
+    for i in range(1, EVOLUTION_CYCLE + 1):
+        print("iter", i)
+        # Caclulatinf summ of all fitnesses of population member
+        prev_total_fitness = sum([x.get_fitness() for x in population])
+        # Selecting the strongest parents from population
+        parents = find_bests(population, cnt=BEST_PARENTS_COUNT)
+        # Creating list of mutated parents
+        children = [mutation(p) for p in parents]
+        
+        # Crossovering best parents
+        for p1 in parents:
+            for p2 in parents:
+                # Parents should not be the same
+                if p1 != p2:
+                    children.append(crossover(p1, p2))
+                    
+        # Appending created children to population                    
+        for child in children:    
+            # We do not need the same individuals in population
+            if child not in population: 
+                append_individual(child)
 
-    population = find_bests(population, POPULATION_SIZE)
+        # If current iteration did not improve total fitness
+        # then generate new individual
+        total_fitness = sum([x.get_fitness() for x in population])
+        while prev_total_fitness == total_fitness:
+            population.append(generate_individual(population[0]))
+            total_fitness = sum([x.get_fitness() for x in population])
 
-    #sum_of_fitnesses = sum([fitness(x) for x in population])
-    #if prev_sum_of_fitnesses == sum_of_fitnesses:
-    #    population.append(generate_individual())
-    #    population = find_maxes(population, POPULATION_SIZE)
+        # Saving superhero to the file
+        superhero = population[0]
+        superhero.save(folder + "\\iter" + str(i) + ".jpg", "JPEG")
+        print(superhero.get_fitness(), file=fit_file)
+            
+    fit_file.close()
 
-    superhero = population[0]
-    superhero.image.save(folder + "\\iter" + str(i) + ".jpg", "JPEG")
+#tests = [("icarus", "airplane"),
+#        ("black-square", "star"),
+#        ("dr-house", "house")]
+
+tests = [
+        ("dr-octopus", "piter-parker"),
+        ("buildings", "city")]
+    
+
+for base, perfect in tests:
+    main(base, perfect)
+    collect()
+    perfect_image = None
+    base_image = None
+    population = list()
